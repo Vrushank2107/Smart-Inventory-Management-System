@@ -1,0 +1,75 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserType {
+  NORMAL
+  SILVER
+  GOLD
+}
+
+enum DiscountRuleType {
+  FESTIVAL
+  MEMBERSHIP
+  MIN_PURCHASE
+}
+
+model Product {
+  id        String     @id @default(cuid())
+  name      String
+  price     Decimal    @db.Decimal(10, 2)
+  category  String
+  createdAt DateTime   @default(now())
+  cartItems CartItem[]
+
+  @@index([category])
+  @@index([createdAt])
+}
+
+model User {
+  id    String   @id @default(cuid())
+  name  String
+  type  UserType @default(NORMAL)
+  carts Cart[]
+
+  @@index([type])
+}
+
+model DiscountRule {
+  id         String           @id @default(cuid())
+  name       String
+  type       DiscountRuleType
+  value      Decimal          @db.Decimal(10, 2)
+  isActive   Boolean          @default(true)
+  priority   Int              @default(0)
+  combinable Boolean          @default(false)
+
+  @@index([isActive, priority])
+}
+
+model Cart {
+  id        String     @id @default(cuid())
+  userId    String
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items     CartItem[]
+  createdAt DateTime   @default(now())
+
+  @@index([userId, createdAt])
+}
+
+model CartItem {
+  id        String   @id @default(cuid())
+  cartId    String
+  productId String
+  quantity  Int      @default(1)
+  cart      Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@unique([cartId, productId])
+  @@index([productId])
+}
