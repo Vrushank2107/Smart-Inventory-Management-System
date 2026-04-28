@@ -1,10 +1,8 @@
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import { RegisterSchema, validateRequest } from "@/lib/validation/schemas";
 import { logger } from "@/lib/logging/logger";
-
-const prisma = new PrismaClient();
 
 export async function POST(request) {
   const startTime = Date.now();
@@ -84,6 +82,14 @@ export async function POST(request) {
       stack: error.stack,
       duration: `${duration}ms`
     });
+    
+    // Check for specific database errors
+    if (error.code === 'P2002') {
+      return NextResponse.json({ 
+        error: 'User already exists with this email',
+        timestamp: new Date().toISOString()
+      }, { status: 409 });
+    }
     
     return NextResponse.json({ 
       error: 'Registration failed. Please try again.',
