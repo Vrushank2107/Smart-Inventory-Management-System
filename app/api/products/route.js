@@ -9,7 +9,7 @@ export async function GET(req) {
   const startTime = Date.now();
   
   try {
-    const { searchParams } = new URL(req.url);
+    const { searchParams } = new URL(req.url || '', req.nextUrl?.origin || 'http://localhost');
     const query = Object.fromEntries(searchParams.entries());
     
     const validation = validateRequest(ProductQuerySchema, query);

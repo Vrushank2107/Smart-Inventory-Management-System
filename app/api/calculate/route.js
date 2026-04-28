@@ -5,6 +5,8 @@ import { DiscountEngine } from "@/services/DiscountEngine";
 import { CalculateRequestSchema, validateRequest } from "@/lib/validation/schemas";
 import { logger } from "@/lib/logging/logger";
 
+export const dynamic = 'force-dynamic';
+
 export async function POST(req) {
   const startTime = Date.now();
   

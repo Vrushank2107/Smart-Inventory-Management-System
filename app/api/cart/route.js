@@ -4,6 +4,8 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getToken } from "next-auth/jwt";
 
+export const dynamic = 'force-dynamic';
+
 function isNotFoundPrismaError(error) {
   return error && typeof error === "object" && error.code === "P2025";
 }
