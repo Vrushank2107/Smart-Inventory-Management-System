@@ -8,6 +8,15 @@ export async function POST(request) {
   const startTime = Date.now();
   
   try {
+    // Check if DATABASE_URL is configured
+    if (!process.env.DATABASE_URL) {
+      console.error('DATABASE_URL is not configured');
+      return NextResponse.json({ 
+        error: 'Server configuration error: Database not configured',
+        timestamp: new Date().toISOString()
+      }, { status: 500 });
+    }
+
     const body = await request.json();
     logger.info('Registration request received', { 
       email: body.email,
@@ -80,7 +89,14 @@ export async function POST(request) {
     logger.error('Registration error', { 
       error: error.message,
       stack: error.stack,
+      code: error.code,
       duration: `${duration}ms`
+    });
+    
+    console.error('Registration error details:', {
+      message: error.message,
+      code: error.code,
+      meta: error.meta
     });
     
     // Check for specific database errors
@@ -91,8 +107,17 @@ export async function POST(request) {
       }, { status: 409 });
     }
     
+    // Check for connection errors
+    if (error.code === 'P1001' || error.message?.includes('can\'t reach database')) {
+      return NextResponse.json({ 
+        error: 'Database connection failed. Please try again later.',
+        timestamp: new Date().toISOString()
+      }, { status: 503 });
+    }
+    
     return NextResponse.json({ 
       error: 'Registration failed. Please try again.',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined,
       timestamp: new Date().toISOString()
     }, { status: 500 });
   }
