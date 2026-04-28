@@ -157,9 +157,6 @@ export default function ShopClient({ initialData, categories }) {
   }, [router]);
 
   useEffect(() => {
-    if (currentPage === 1 && !debouncedSearch && !selectedCategory) {
-      return;
-    }
     fetchProducts(currentPage, debouncedSearch, selectedCategory);
   }, [currentPage, debouncedSearch, selectedCategory, fetchProducts]);
 
