@@ -12,11 +12,6 @@ export async function GET(req) {
     const { searchParams } = new URL(req.url);
     const query = Object.fromEntries(searchParams.entries());
     
-    logger.info('Products request received', { 
-      query,
-      userAgent: req.headers.get('user-agent')
-    });
-
     const validation = validateRequest(ProductQuerySchema, query);
     if (!validation.success) {
       logger.warn('Products validation failed', { errors: validation.error });
@@ -40,11 +35,10 @@ export async function GET(req) {
     });
 
     const duration = Date.now() - startTime;
-    logger.info('Products retrieved successfully', { 
+    logger.info('Products retrieved successfully', {
       duration: `${duration}ms`,
       page,
       limit,
-      total: result.total,
       category,
       search
     });

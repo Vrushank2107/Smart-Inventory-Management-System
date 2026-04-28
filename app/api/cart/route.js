@@ -6,35 +6,26 @@ import { getToken } from "next-auth/jwt";
 
 export async function GET(request) {
   try {
-    // Try both session methods
     const session = await getServerSession(authOptions);
-    const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET });
-    
-    console.log('Cart API - Session check:', session ? 'Session found' : 'No session');
-    console.log('Cart API - Token check:', token ? 'Token found' : 'No token');
-    console.log('Cart API - Request headers:', Object.fromEntries(request.headers.entries()));
+    const token = session ? null : await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET });
     
     if (!session && !token) {
-      console.log('Cart API - Unauthorized access attempt');
       return NextResponse.json(
         { error: "Unauthorized - Please login first" },
         { status: 401 }
       );
     }
     
-    // Use token if session is not available
     const userId = session?.user?.id || token?.sub;
     
     if (!userId) {
-      console.log('Cart API - No user ID found');
       return NextResponse.json(
         { error: "User ID not found" },
         { status: 401 }
       );
     }
 
-    // Get or create user's cart
-    let cart = await prisma.cart.findFirst({
+    const cart = await prisma.cart.findFirst({
       where: {
         userId: userId
       },
@@ -48,25 +39,14 @@ export async function GET(request) {
     });
 
     if (!cart) {
-      cart = await prisma.cart.create({
-        data: {
-          userId: userId
-        },
-        include: {
-          items: {
-            include: {
-              product: true
-            }
-          }
-        }
-      });
+      return NextResponse.json({ items: [] });
     }
 
     return NextResponse.json(cart);
   } catch (error) {
     console.error("Error fetching cart:", error);
     return NextResponse.json(
-      { error: "Failed to fetch cart", details: error.message, stack: error.stack },
+      { error: "Failed to fetch cart" },
       { status: 500 }
     );
   }
@@ -74,26 +54,19 @@ export async function GET(request) {
 
 export async function POST(request) {
   try {
-    // Try both session methods
     const session = await getServerSession(authOptions);
-    const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET });
-    
-    console.log('Cart POST API - Session check:', session ? 'Session found' : 'No session');
-    console.log('Cart POST API - Token check:', token ? 'Token found' : 'No token');
+    const token = session ? null : await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET });
     
     if (!session && !token) {
-      console.log('Cart POST API - Unauthorized access attempt');
       return NextResponse.json(
         { error: "Unauthorized - Please login first" },
         { status: 401 }
       );
     }
     
-    // Use token if session is not available
     const userId = session?.user?.id || token?.sub;
     
     if (!userId) {
-      console.log('Cart POST API - No user ID found');
       return NextResponse.json(
         { error: "User ID not found" },
         { status: 401 }
@@ -121,7 +94,6 @@ export async function POST(request) {
       );
     }
 
-    // Get or create user's cart
     let cart = await prisma.cart.findFirst({
       where: {
         userId: userId
@@ -136,8 +108,7 @@ export async function POST(request) {
       });
     }
 
-    // Update or create cart item
-    const cartItem = await prisma.cartItem.upsert({
+    await prisma.cartItem.upsert({
       where: {
         cartId_productId: {
           cartId: cart.id,
@@ -151,17 +122,25 @@ export async function POST(request) {
         cartId: cart.id,
         productId: productId,
         quantity: quantity
-      },
-      include: {
-        product: true
       }
     });
 
-    return NextResponse.json(cartItem);
+    const updatedCart = await prisma.cart.findUnique({
+      where: { id: cart.id },
+      include: {
+        items: {
+          include: {
+            product: true
+          }
+        }
+      }
+    });
+
+    return NextResponse.json(updatedCart);
   } catch (error) {
     console.error("Error adding to cart:", error);
     return NextResponse.json(
-      { error: "Failed to add item to cart", details: error.message, stack: error.stack },
+      { error: "Failed to add item to cart" },
       { status: 500 }
     );
   }
@@ -201,7 +180,6 @@ export async function DELETE(request) {
       );
     }
 
-    // Remove cart item
     await prisma.cartItem.delete({
       where: {
         cartId_productId: {
@@ -211,7 +189,18 @@ export async function DELETE(request) {
       }
     });
 
-    return NextResponse.json({ message: "Item removed from cart" });
+    const updatedCart = await prisma.cart.findUnique({
+      where: { id: cart.id },
+      include: {
+        items: {
+          include: {
+            product: true
+          }
+        }
+      }
+    });
+
+    return NextResponse.json(updatedCart || { items: [] });
   } catch (error) {
     console.error("Error removing from cart:", error);
     return NextResponse.json(

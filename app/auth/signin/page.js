@@ -1,22 +1,24 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { signIn } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { LoginSchema, validateRequest } from "@/lib/validation/schemas";
 
-export default function Login() {
+function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
+    const callbackUrl = searchParams.get("callbackUrl") || "/";
     
     // Validate form data
     const validation = validateRequest(LoginSchema, { email, password });
@@ -31,13 +33,14 @@ export default function Login() {
       const result = await signIn("credentials", {
         email,
         password,
-        redirect: false
+        redirect: false,
+        callbackUrl
       });
 
       if (result.error) {
         setError("Invalid credentials");
       } else {
-        router.push("/");
+        router.push(callbackUrl);
         router.refresh();
       }
     } catch (error) {
@@ -176,5 +179,23 @@ export default function Login() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function Login() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex items-start justify-center pt-2 w-full">
+          <div className="w-full max-w-md px-4">
+            <div className="glass-card bg-white/80 dark:bg-surface-800/80 backdrop-blur-md p-8 rounded-2xl shadow-xl border border-white/20 dark:border-surface-700/50">
+              <p className="text-sm text-surface-600 dark:text-surface-400">Loading sign in...</p>
+            </div>
+          </div>
+        </div>
+      }
+    >
+      <LoginForm />
+    </Suspense>
   );
 }

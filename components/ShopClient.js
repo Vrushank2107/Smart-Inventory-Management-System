@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { ProductSkeleton, LoadingSpinner } from "./SkeletonLoader";
@@ -47,6 +47,7 @@ export default function ShopClient({ initialData, categories }) {
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+  const didMountRef = useRef(false);
   
   // Debounced search for better UX
   const debouncedSearch = useDebounce(search, 300);
@@ -65,17 +66,11 @@ export default function ShopClient({ initialData, categories }) {
 
   const fetchCart = async () => {
     try {
-      console.log('Fetching cart...');
       const response = await fetch("/api/cart");
-      console.log('Cart fetch response status:', response.status);
       
       if (response.ok) {
         const cart = await response.json();
-        console.log('Cart data:', cart);
         setCartItems(cart.items || []);
-      } else {
-        const errorData = await response.json();
-        console.error('Failed to fetch cart:', errorData);
       }
     } catch (error) {
       console.error("Error fetching cart:", error);
@@ -128,17 +123,12 @@ export default function ShopClient({ initialData, categories }) {
         ...(category && { category })
       });
 
-      console.log('Fetching products with params:', params.toString());
       const response = await fetch(`/api/products?${params}`);
       const data = await response.json();
-      
-      console.log('Products API response:', data);
-      
+
       if (data.products) {
         setProducts(data.products);
         setPagination(data.pagination);
-      } else {
-        console.error('No products in response:', data);
       }
     } catch (error) {
       console.error("Error fetching products:", error);
@@ -148,6 +138,10 @@ export default function ShopClient({ initialData, categories }) {
   }, []);
 
   useEffect(() => {
+    if (!didMountRef.current) {
+      didMountRef.current = true;
+      return;
+    }
     fetchProducts(currentPage, debouncedSearch, selectedCategory);
   }, [currentPage, debouncedSearch, selectedCategory, fetchProducts]);
 
@@ -158,86 +152,109 @@ export default function ShopClient({ initialData, categories }) {
   }, [cartItems]);
 
   const addToCart = async (productId) => {
-    try {
-      const currentQuantity = quantityById.get(productId) || 0;
-      const maxQuantity = 8; // Set reasonable limit
-      
-      if (currentQuantity >= maxQuantity) {
-        console.log('Maximum quantity reached for product:', productId);
-        return; // Don't add if already at max
+    const currentQuantity = quantityById.get(productId) || 0;
+    const maxQuantity = 8; // Set reasonable limit
+    
+    if (currentQuantity >= maxQuantity) {
+      return;
+    }
+
+    const newQuantity = currentQuantity + 1;
+    const fallbackProduct = products.find((item) => item.id === productId);
+    const previousCartItems = cartItems;
+
+    setCartItems((prev) => {
+      const existing = prev.find((item) => item.productId === productId);
+      if (existing) {
+        return prev.map((item) =>
+          item.productId === productId ? { ...item, quantity: newQuantity } : item
+        );
       }
-      
-      const newQuantity = currentQuantity + 1;
-      console.log('Adding to cart:', productId, 'New quantity:', newQuantity);
-      
+      return [
+        ...prev,
+        {
+          productId,
+          quantity: newQuantity,
+          product: fallbackProduct
+        }
+      ];
+    });
+
+    try {
       const response = await fetch("/api/cart", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ productId, quantity: newQuantity })
       });
-      
-      console.log('Cart API response status:', response.status);
-      
+
       if (response.ok) {
         const data = await response.json();
-        console.log('Cart item added:', data);
-        fetchCart(); // Refresh cart after adding
+        setCartItems(data.items || []);
       } else {
-        const errorData = await response.json();
-        console.error('Failed to add to cart:', errorData);
+        setCartItems(previousCartItems);
       }
     } catch (error) {
       console.error("Error adding to cart:", error);
+      setCartItems(previousCartItems);
     }
   };
 
   const decreaseQuantity = async (productId) => {
     const currentQuantity = quantityById.get(productId) || 0;
+    const previousCartItems = cartItems;
     if (currentQuantity <= 1) {
       // Remove item from cart
+      setCartItems((prev) => prev.filter((item) => item.productId !== productId));
       try {
-        console.log('Removing from cart:', productId);
         const response = await fetch("/api/cart", {
           method: "DELETE",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ productId })
         });
         if (response.ok) {
-          console.log('Item removed from cart:', productId);
-          fetchCart(); // Refresh cart after removing
+          const data = await response.json();
+          setCartItems(data.items || []);
+        } else {
+          setCartItems(previousCartItems);
         }
       } catch (error) {
         console.error("Error removing from cart:", error);
+        setCartItems(previousCartItems);
       }
     } else {
       // Update quantity
+      const newQuantity = currentQuantity - 1;
+      setCartItems((prev) =>
+        prev.map((item) =>
+          item.productId === productId ? { ...item, quantity: newQuantity } : item
+        )
+      );
       try {
-        const newQuantity = currentQuantity - 1;
-        console.log('Decreasing quantity for:', productId, 'New quantity:', newQuantity);
         const response = await fetch("/api/cart", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ productId, quantity: newQuantity })
         });
         if (response.ok) {
-          console.log('Quantity updated:', productId);
-          fetchCart(); // Refresh cart after updating
+          const data = await response.json();
+          setCartItems(data.items || []);
+        } else {
+          setCartItems(previousCartItems);
         }
       } catch (error) {
         console.error("Error updating quantity:", error);
+        setCartItems(previousCartItems);
       }
     }
   };
 
   const handleSearch = (e) => {
-    e.preventDefault();
     const value = e.target.value;
     setSearch(value);
     setCurrentPage(1);
   };
 
   const handleCategoryChange = (e) => {
-    e.preventDefault();
     const value = e.target.value;
     setSelectedCategory(value);
     setCurrentPage(1);
@@ -251,7 +268,7 @@ export default function ShopClient({ initialData, categories }) {
     setCurrentPage(page);
   };
 
-  if (status === "loading" || loading) {
+  if (status === "loading") {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>

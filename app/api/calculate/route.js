@@ -10,10 +10,7 @@ export async function POST(req) {
   
   try {
     const body = await req.json();
-    logger.info('Calculate request received', { 
-      userAgent: req.headers.get('user-agent'),
-      ip: req.headers.get('x-forwarded-for') || 'unknown'
-    });
+    logger.info('Calculate request received');
 
     const validation = validateRequest(CalculateRequestSchema, body);
     if (!validation.success) {
@@ -30,14 +27,9 @@ export async function POST(req) {
 
     const { cartItems, userType } = validation.data;
     
-    console.log("API received userType:", userType);
-    console.log("API received cartItems:", cartItems);
-    
     const hydratedItems = await hydrateCartItems(cartItems);
-    console.log("Hydrated items:", hydratedItems);
     
     const rules = await getActiveDiscountRules();
-    console.log("Active rules:", rules);
     
     const engine = new DiscountEngine({ rules });
     const result = engine.evaluate({
@@ -45,8 +37,6 @@ export async function POST(req) {
       userType
     });
     
-    console.log("Discount engine result:", result);
-
     const duration = Date.now() - startTime;
     logger.info('Discount calculation completed', { 
       duration: `${duration}ms`,
