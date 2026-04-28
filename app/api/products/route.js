@@ -56,8 +56,17 @@ export async function GET(req) {
       duration: `${duration}ms`
     });
     
+    // Check for database connection errors
+    if (error.message && error.message.includes('connect')) {
+      return NextResponse.json({ 
+        error: 'Database connection failed. Please check your database configuration.',
+        timestamp: new Date().toISOString()
+      }, { status: 503 });
+    }
+    
     return NextResponse.json({ 
       error: 'Internal server error',
+      details: error.message,
       timestamp: new Date().toISOString()
     }, { status: 500 });
   }
