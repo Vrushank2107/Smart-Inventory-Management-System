@@ -6,7 +6,12 @@ import SessionProviderWrapper from "@/components/SessionProviderWrapper";
 
 export const metadata = {
   title: "Smart Inventory & Intelligent Discount Engine",
-  description: "Production-grade inventory and discount decision application"
+  description: "Production-grade inventory and discount decision application",
+  icons: {
+    icon: "/icon.svg",
+    shortcut: "/icon.svg",
+    apple: "/icon.svg"
+  }
 };
 
 export default function RootLayout({ children }) {

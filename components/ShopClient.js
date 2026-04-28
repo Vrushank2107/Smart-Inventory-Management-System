@@ -27,6 +27,14 @@ function money(value) {
   return Number(value || 0).toFixed(2);
 }
 
+async function parseJsonResponse(response) {
+  const contentType = response.headers.get("content-type") || "";
+  if (!contentType.includes("application/json")) {
+    throw new Error(`Expected JSON response, received ${contentType || "unknown content type"}`);
+  }
+  return response.json();
+}
+
 export default function ShopClient({ initialData, categories }) {
   const { data: session, status } = useSession();
   const router = useRouter();
@@ -68,8 +76,10 @@ export default function ShopClient({ initialData, categories }) {
       const response = await fetch("/api/cart");
       
       if (response.ok) {
-        const cart = await response.json();
+        const cart = await parseJsonResponse(response);
         setCartItems(cart.items || []);
+      } else if (response.status === 401) {
+        router.push("/auth/signin?callbackUrl=/inventory");
       }
     } catch (error) {
       console.error("Error fetching cart:", error);
@@ -95,7 +105,10 @@ export default function ShopClient({ initialData, categories }) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ cartItems, userType })
         });
-        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(`Failed to calculate discounts (${response.status})`);
+        }
+        const data = await parseJsonResponse(response);
         setSummary(data);
       } catch (error) {
         console.error("Calculation error:", error);
@@ -123,7 +136,14 @@ export default function ShopClient({ initialData, categories }) {
       });
 
       const response = await fetch(`/api/products?${params}`);
-      const data = await response.json();
+      if (response.status === 401) {
+        router.push("/auth/signin?callbackUrl=/inventory");
+        return;
+      }
+      if (!response.ok) {
+        throw new Error(`Failed to fetch products (${response.status})`);
+      }
+      const data = await parseJsonResponse(response);
 
       if (data.products) {
         setProducts(data.products);
@@ -134,7 +154,7 @@ export default function ShopClient({ initialData, categories }) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [router]);
 
   useEffect(() => {
     if (currentPage === 1 && !debouncedSearch && !selectedCategory) {
@@ -186,7 +206,7 @@ export default function ShopClient({ initialData, categories }) {
       });
 
       if (response.ok) {
-        const data = await response.json();
+        const data = await parseJsonResponse(response);
         setCartItems(data.items || []);
       } else {
         setCartItems(previousCartItems);
@@ -210,7 +230,7 @@ export default function ShopClient({ initialData, categories }) {
           body: JSON.stringify({ productId })
         });
         if (response.ok) {
-          const data = await response.json();
+          const data = await parseJsonResponse(response);
           setCartItems(data.items || []);
         } else {
           setCartItems(previousCartItems);
@@ -234,7 +254,7 @@ export default function ShopClient({ initialData, categories }) {
           body: JSON.stringify({ productId, quantity: newQuantity })
         });
         if (response.ok) {
-          const data = await response.json();
+          const data = await parseJsonResponse(response);
           setCartItems(data.items || []);
         } else {
           setCartItems(previousCartItems);

@@ -37,11 +37,13 @@ function LoginForm() {
         callbackUrl
       });
 
-      if (result.error) {
+      if (result?.error) {
         setError("Invalid credentials");
-      } else {
-        router.push(callbackUrl);
+      } else if (result?.ok) {
+        router.replace(result.url || callbackUrl);
         router.refresh();
+      } else {
+        setError("Login failed. Please try again.");
       }
     } catch (error) {
       setError("An error occurred. Please try again.");
