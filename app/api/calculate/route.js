@@ -10,7 +10,18 @@ export async function POST(req) {
   
   try {
     const body = await req.json();
-    logger.info('Calculate request received');
+    logger.info('Calculate request received', { body });
+
+    if (!body || typeof body !== 'object') {
+      logger.warn('Invalid request body');
+      return NextResponse.json(
+        { 
+          error: 'Invalid request body',
+          timestamp: new Date().toISOString()
+        }, 
+        { status: 400 }
+      );
+    }
 
     const validation = validateRequest(CalculateRequestSchema, body);
     if (!validation.success) {
