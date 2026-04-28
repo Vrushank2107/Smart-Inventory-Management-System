@@ -1,13 +1,35 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
+import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
+import { ProductSkeleton, LoadingSpinner } from "./SkeletonLoader";
+
+// Debounce hook for search input
+function useDebounce(value, delay) {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedValue(value);
+    }, delay);
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [value, delay]);
+
+  return debouncedValue;
+}
 
 function money(value) {
   return Number(value || 0).toFixed(2);
 }
 
-export default function ShopClient({ products }) {
+export default function ShopClient({ initialData, categories }) {
+  const { data: session, status } = useSession();
+  const router = useRouter();
   const [cartItems, setCartItems] = useState([]);
   const [userType, setUserType] = useState("NORMAL");
   const [summary, setSummary] = useState({
@@ -17,27 +39,48 @@ export default function ShopClient({ products }) {
     explanation: []
   });
   const [isCalculating, setIsCalculating] = useState(false);
-  const [hasHydratedCart, setHasHydratedCart] = useState(false);
+  const [loading, setLoading] = useState(false);
+  
+  // Pagination and filtering state
+  const [products, setProducts] = useState(initialData.products);
+  const [pagination, setPagination] = useState(initialData.pagination);
+  const [search, setSearch] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  
+  // Debounced search for better UX
+  const debouncedSearch = useDebounce(search, 300);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      try {
-        const existing = window.localStorage.getItem("smart-inventory-cart");
-        setCartItems(existing ? JSON.parse(existing) : []);
-      } catch {
-        setCartItems([]);
-      } finally {
-        setHasHydratedCart(true);
+    if (status === "unauthenticated") {
+      router.push("/auth/signin?callbackUrl=/inventory");
+      return;
+    }
+
+    if (status === "authenticated") {
+      fetchCart();
+      setUserType(session.user.type || "NORMAL");
+    }
+  }, [status, session, router]);
+
+  const fetchCart = async () => {
+    try {
+      console.log('Fetching cart...');
+      const response = await fetch("/api/cart");
+      console.log('Cart fetch response status:', response.status);
+      
+      if (response.ok) {
+        const cart = await response.json();
+        console.log('Cart data:', cart);
+        setCartItems(cart.items || []);
+      } else {
+        const errorData = await response.json();
+        console.error('Failed to fetch cart:', errorData);
       }
-    }, 0);
-
-    return () => clearTimeout(timer);
-  }, []);
-
-  useEffect(() => {
-    if (!hasHydratedCart) return;
-    localStorage.setItem("smart-inventory-cart", JSON.stringify(cartItems));
-  }, [cartItems, hasHydratedCart]);
+    } catch (error) {
+      console.error("Error fetching cart:", error);
+    }
+  };
 
   useEffect(() => {
     const calculate = async () => {
@@ -52,18 +95,61 @@ export default function ShopClient({ products }) {
       }
       setIsCalculating(true);
 
-      const response = await fetch("/api/calculate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cartItems, userType })
-      });
-      const data = await response.json();
-      setSummary(data);
+      try {
+        const response = await fetch("/api/calculate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ cartItems, userType })
+        });
+        const data = await response.json();
+        setSummary(data);
+      } catch (error) {
+        console.error("Calculation error:", error);
+        setSummary({
+          total: 0,
+          discountApplied: 0,
+          finalAmount: 0,
+          explanation: ["Error calculating discounts. Please try again."]
+        });
+      }
       setIsCalculating(false);
     };
 
     calculate();
   }, [cartItems, userType]);
+
+  const fetchProducts = useCallback(async (page = 1, searchQuery = "", category = "") => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({
+        page: page.toString(),
+        limit: "12",
+        ...(searchQuery && { search: searchQuery }),
+        ...(category && { category })
+      });
+
+      console.log('Fetching products with params:', params.toString());
+      const response = await fetch(`/api/products?${params}`);
+      const data = await response.json();
+      
+      console.log('Products API response:', data);
+      
+      if (data.products) {
+        setProducts(data.products);
+        setPagination(data.pagination);
+      } else {
+        console.error('No products in response:', data);
+      }
+    } catch (error) {
+      console.error("Error fetching products:", error);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchProducts(currentPage, debouncedSearch, selectedCategory);
+  }, [currentPage, debouncedSearch, selectedCategory, fetchProducts]);
 
   const quantityById = useMemo(() => {
     const map = new Map();
@@ -71,91 +157,301 @@ export default function ShopClient({ products }) {
     return map;
   }, [cartItems]);
 
-  const addToCart = (productId) => {
-    setCartItems((prev) => {
-      const idx = prev.findIndex((item) => item.productId === productId);
-      if (idx === -1) return [...prev, { productId, quantity: 1 }];
-      const clone = [...prev];
-      clone[idx] = { ...clone[idx], quantity: clone[idx].quantity + 1 };
-      return clone;
-    });
+  const addToCart = async (productId) => {
+    try {
+      const currentQuantity = quantityById.get(productId) || 0;
+      const maxQuantity = 8; // Set reasonable limit
+      
+      if (currentQuantity >= maxQuantity) {
+        console.log('Maximum quantity reached for product:', productId);
+        return; // Don't add if already at max
+      }
+      
+      const newQuantity = currentQuantity + 1;
+      console.log('Adding to cart:', productId, 'New quantity:', newQuantity);
+      
+      const response = await fetch("/api/cart", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ productId, quantity: newQuantity })
+      });
+      
+      console.log('Cart API response status:', response.status);
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Cart item added:', data);
+        fetchCart(); // Refresh cart after adding
+      } else {
+        const errorData = await response.json();
+        console.error('Failed to add to cart:', errorData);
+      }
+    } catch (error) {
+      console.error("Error adding to cart:", error);
+    }
   };
 
-  const decreaseQuantity = (productId) => {
-    setCartItems((prev) =>
-      prev
-        .map((item) => (item.productId === productId ? { ...item, quantity: Math.max(0, item.quantity - 1) } : item))
-        .filter((item) => item.quantity > 0)
-    );
+  const decreaseQuantity = async (productId) => {
+    const currentQuantity = quantityById.get(productId) || 0;
+    if (currentQuantity <= 1) {
+      // Remove item from cart
+      try {
+        console.log('Removing from cart:', productId);
+        const response = await fetch("/api/cart", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ productId })
+        });
+        if (response.ok) {
+          console.log('Item removed from cart:', productId);
+          fetchCart(); // Refresh cart after removing
+        }
+      } catch (error) {
+        console.error("Error removing from cart:", error);
+      }
+    } else {
+      // Update quantity
+      try {
+        const newQuantity = currentQuantity - 1;
+        console.log('Decreasing quantity for:', productId, 'New quantity:', newQuantity);
+        const response = await fetch("/api/cart", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ productId, quantity: newQuantity })
+        });
+        if (response.ok) {
+          console.log('Quantity updated:', productId);
+          fetchCart(); // Refresh cart after updating
+        }
+      } catch (error) {
+        console.error("Error updating quantity:", error);
+      }
+    }
   };
+
+  const handleSearch = (e) => {
+    e.preventDefault();
+    const value = e.target.value;
+    setSearch(value);
+    setCurrentPage(1);
+  };
+
+  const handleCategoryChange = (e) => {
+    e.preventDefault();
+    const value = e.target.value;
+    setSelectedCategory(value);
+    setCurrentPage(1);
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+  };
+
+  const handlePageChange = (page) => {
+    setCurrentPage(page);
+  };
+
+  if (status === "loading" || loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+      </div>
+    );
+  }
 
   return (
     <section className="space-y-7">
       <header className="glass-card relative overflow-hidden p-6 md:p-8">
-        <div className="pointer-events-none absolute -right-12 -top-12 h-36 w-36 rounded-full bg-cyan-400/20 blur-3xl" />
-        <div className="pointer-events-none absolute -bottom-16 left-10 h-44 w-44 rounded-full bg-violet-500/20 blur-3xl" />
+        <div className="pointer-events-none absolute -right-12 -top-12 h-36 w-36 rounded-full bg-accent-400/20 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-16 left-10 h-44 w-44 rounded-full bg-primary-500/20 blur-3xl" />
         <div className="relative z-10 flex flex-wrap items-start justify-between gap-4">
           <div>
-            <p className="text-xs uppercase tracking-[0.2em] text-cyan-300">Inventory Catalog</p>
-            <h1 className="mt-2 text-3xl font-bold leading-tight md:text-4xl">Browse Products & Build Cart</h1>
-            <p className="mt-3 max-w-2xl text-slate-300">
-              Build dynamic baskets and get real-time discount optimization powered by a rule-based decision engine.
+            <p className="text-xs uppercase tracking-[0.2em] text-accent-600 dark:text-accent-300">Inventory Catalog</p>
+            <h1 className="mt-2 text-3xl font-bold leading-tight md:text-4xl text-surface-900 dark:text-surface-50">
+              {search ? `Search Results for "${search}"` : selectedCategory ? `${selectedCategory} Products` : "Browse Products & Build Cart"}
+            </h1>
+            <p className="mt-3 max-w-2xl text-surface-600 dark:text-surface-300">
+              {search || selectedCategory 
+                ? `Found ${products.length} of ${pagination.totalItems} products` 
+                : "Build dynamic baskets and get real-time discount optimization powered by a rule-based decision engine."
+              }
             </p>
+            {(search || selectedCategory) && (
+              <div className="mt-3 flex items-center gap-3">
+                <button
+                  onClick={() => {
+                    setSearch("");
+                    setSelectedCategory("");
+                    setCurrentPage(1);
+                  }}
+                  className="px-4 py-2 rounded-lg border border-surface-300 bg-white text-surface-700 hover:bg-surface-50 dark:border-surface-600 dark:bg-surface-800 dark:text-surface-300 dark:hover:bg-surface-700"
+                >
+                  Clear All Filters
+                </button>
+              </div>
+            )}
           </div>
-          <Link href="/cart" className="btn-primary">
+          <Link 
+            href={`/cart?total=${summary.total}&discount=${summary.discountApplied}&finalAmount=${summary.finalAmount}&userType=${userType}`}
+            className="btn-primary"
+            onClick={() => {
+              // Also store in localStorage as backup
+              const dataWithUserType = { ...summary, userType };
+              localStorage.setItem('inventoryDiscountSummary', JSON.stringify(dataWithUserType));
+            }}
+          >
             Open Cart ({cartItems.reduce((sum, item) => sum + item.quantity, 0)})
           </Link>
         </div>
       </header>
 
-      <div className="glass-card p-5 md:p-6">
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <label className="block text-sm font-medium text-slate-200">Customer Tier</label>
-          <span className="rounded-full bg-cyan-400/15 px-3 py-1 text-xs font-medium text-cyan-300">
-            Recalculates instantly
-          </span>
+      {/* Search and Filters */}
+      <form onSubmit={handleSubmit} className="glass-card p-5 md:p-6">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <div className="md:col-span-2">
+            <label htmlFor="search" className="block text-sm font-medium text-surface-700 dark:text-surface-200 mb-2">
+              Search Products
+            </label>
+            <input
+              id="search"
+              type="text"
+              value={search}
+              onChange={handleSearch}
+              placeholder="Search by name or category..."
+              className="input-modern w-full"
+            />
+          </div>
+          <div>
+            <label htmlFor="category" className="block text-sm font-medium text-surface-700 dark:text-surface-200 mb-2">
+              Category
+            </label>
+            <select
+              id="category"
+              value={selectedCategory}
+              onChange={handleCategoryChange}
+              className="input-modern w-full"
+            >
+              <option value="">All Categories</option>
+              {categories.map((category) => (
+                <option key={category} value={category}>
+                  {category}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="userType" className="block text-sm font-medium text-surface-700 dark:text-surface-200 mb-2">
+              Customer Tier
+            </label>
+            <select
+              id="userType"
+              value={userType}
+              onChange={(event) => setUserType(event.target.value)}
+              className="input-modern w-full"
+            >
+              <option value="NORMAL">NORMAL</option>
+              <option value="SILVER">SILVER</option>
+              <option value="GOLD">GOLD</option>
+            </select>
+          </div>
         </div>
-        <select
-          value={userType}
-          onChange={(event) => setUserType(event.target.value)}
-          className="input-modern w-full max-w-xs"
-        >
-          <option value="NORMAL">NORMAL</option>
-          <option value="SILVER">SILVER</option>
-          <option value="GOLD">GOLD</option>
-        </select>
-      </div>
+      </form>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {products.map((product) => (
-          <article
-            key={product.id}
-            className="glass-card group flex h-full flex-col justify-between p-5 transition hover:-translate-y-0.5 hover:border-cyan-300/30"
-          >
-            <div>
-              <p className="inline-flex rounded-full bg-cyan-400/10 px-2.5 py-1 text-xs uppercase tracking-wide text-cyan-300">
-                {product.category}
+      {/* Products Grid */}
+      <div className="space-y-4">
+        {loading ? (
+          <ProductSkeleton count={12} />
+        ) : (
+          <>
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-surface-600 dark:text-surface-400">
+                Showing {products.length} of {pagination.totalItems} products
               </p>
-              <h2 className="mt-3 text-lg font-semibold text-slate-100">{product.name}</h2>
-              <p className="mt-2 text-2xl font-bold text-white">Rs. {money(product.price)}</p>
+              {loading && <LoadingSpinner size="sm" />}
             </div>
-            <div className="mt-4 flex items-center gap-2">
-              <button
-                onClick={() => decreaseQuantity(product.id)}
-                className="h-10 w-10 rounded-xl border border-white/10 bg-white/5 text-lg font-semibold transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
-                disabled={!quantityById.get(product.id)}
-              >
-                -
-              </button>
-              <button
-                onClick={() => addToCart(product.id)}
-                className="btn-muted flex-1 group-hover:border-cyan-300/40"
-              >
-                Add to Cart <span className="ml-2 text-cyan-300">({quantityById.get(product.id) || 0})</span>
-              </button>
+            
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              {products.map((product) => (
+                <article
+                  key={product.id}
+                  className="glass-card group flex h-full flex-col justify-between p-5 transition hover:-translate-y-0.5 hover:border-accent-300/30"
+                >
+                  <div>
+                    <p className="inline-flex rounded-full bg-accent-400/10 px-2.5 py-1 text-xs uppercase tracking-wide text-accent-600 dark:text-accent-300">
+                      {product.category}
+                    </p>
+                    <h2 className="mt-3 text-lg font-semibold text-surface-900 dark:text-surface-50">{product.name}</h2>
+                    <p className="mt-2 text-2xl font-bold text-surface-900 dark:text-surface-50">Rs. {money(product.price)}</p>
+                  </div>
+                  <div className="mt-4 flex items-center gap-2">
+                    <button
+                      onClick={() => decreaseQuantity(product.id)}
+                      className="h-10 w-10 rounded-xl border border-surface-300 dark:border-white/10 bg-white dark:bg-surface-800 text-surface-900 dark:text-surface-50 text-lg font-semibold transition hover:bg-surface-100 dark:hover:bg-surface-700 disabled:cursor-not-allowed disabled:opacity-40"
+                      disabled={!quantityById.get(product.id)}
+                      aria-label={`Decrease quantity for ${product.name}`}
+                    >
+                      -
+                    </button>
+                    <button
+                      onClick={() => addToCart(product.id)}
+                      disabled={quantityById.get(product.id) >= 8}
+                      className={`btn-muted flex-1 group-hover:border-cyan-300/40 disabled:opacity-50 disabled:cursor-not-allowed ${
+                        quantityById.get(product.id) >= 8 ? 'bg-surface-100 dark:bg-surface-700' : ''
+                      }`}
+                      aria-label={`Add ${product.name} to cart`}
+                    >
+                      {quantityById.get(product.id) >= 8 
+                        ? `Max Quantity (${quantityById.get(product.id)})` 
+                        : `Add to Cart (${quantityById.get(product.id) || 0})`
+                      }
+                    </button>
+                  </div>
+                </article>
+              ))}
             </div>
-          </article>
-        ))}
+
+            {/* Pagination */}
+            {pagination.totalPages > 1 && (
+              <div className="flex justify-center items-center space-x-2 mt-8">
+                <button
+                  onClick={() => handlePageChange(currentPage - 1)}
+                  disabled={!pagination.hasPreviousPage}
+                  className="px-3 py-2 rounded-lg border border-surface-300 bg-white text-surface-700 hover:bg-surface-50 disabled:opacity-50 disabled:cursor-not-allowed dark:border-surface-600 dark:bg-surface-800 dark:text-surface-300 dark:hover:bg-surface-700"
+                  aria-label="Previous page"
+                >
+                  Previous
+                </button>
+                
+                <div className="flex space-x-1">
+                  {Array.from({ length: pagination.totalPages }, (_, i) => i + 1).map((page) => (
+                    <button
+                      key={page}
+                      onClick={() => handlePageChange(page)}
+                      className={`px-3 py-2 rounded-lg border ${
+                        page === currentPage
+                          ? "border-primary-500 bg-primary-50 text-primary-700 dark:border-primary-400 dark:bg-primary-900/20 dark:text-primary-300"
+                          : "border-surface-300 bg-white text-surface-700 hover:bg-surface-50 dark:border-surface-600 dark:bg-surface-800 dark:text-surface-300 dark:hover:bg-surface-700"
+                      }`}
+                      aria-label={`Go to page ${page}`}
+                      aria-current={page === currentPage ? "page" : undefined}
+                    >
+                      {page}
+                    </button>
+                  ))}
+                </div>
+                
+                <button
+                  onClick={() => handlePageChange(currentPage + 1)}
+                  disabled={!pagination.hasNextPage}
+                  className="px-3 py-2 rounded-lg border border-surface-300 bg-white text-surface-700 hover:bg-surface-50 disabled:opacity-50 disabled:cursor-not-allowed dark:border-surface-600 dark:bg-surface-800 dark:text-surface-300 dark:hover:bg-surface-700"
+                  aria-label="Next page"
+                >
+                  Next
+                </button>
+              </div>
+            )}
+          </>
+        )}
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
@@ -167,16 +463,16 @@ export default function ShopClient({ products }) {
             </span>
           </div>
           <div className="space-y-2 text-sm">
-            <p className="flex items-center justify-between text-slate-300">
+            <p className="flex items-center justify-between text-surface-600 dark:text-surface-300">
               <span>Total</span>
               <span>Rs. {money(summary.total)}</span>
             </p>
-            <p className="flex items-center justify-between text-emerald-300">
+            <p className="flex items-center justify-between text-emerald-600 dark:text-emerald-300">
               <span>Discount Applied</span>
               <span>- Rs. {money(summary.discountApplied)}</span>
             </p>
-            <div className="my-2 h-px bg-white/10" />
-            <p className="flex items-center justify-between text-xl font-bold text-white">
+            <div className="my-2 h-px bg-surface-200 dark:bg-white/10" />
+            <p className="flex items-center justify-between text-xl font-bold text-surface-900 dark:text-surface-50">
               <span>Payable</span>
               <span>Rs. {money(summary.finalAmount)}</span>
             </p>
@@ -184,9 +480,9 @@ export default function ShopClient({ products }) {
         </section>
         <section className="glass-card p-5">
           <h3 className="text-lg font-semibold">Decision Explanation</h3>
-          <ul className="mt-3 space-y-2 text-sm text-slate-300">
-            {summary.explanation?.map((line) => (
-              <li key={line} className="soft-border rounded-lg bg-slate-900/50 px-3 py-2">
+          <ul className="mt-3 space-y-2 text-sm text-surface-300">
+            {summary.explanation?.map((line, index) => (
+              <li key={index} className="soft-border rounded-lg bg-surface-100 dark:bg-surface-900/50 px-3 py-2 text-surface-700 dark:text-surface-300">
                 {line}
               </li>
             ))}

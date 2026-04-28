@@ -1,9 +1,16 @@
 import ShopClient from "@/components/ShopClient";
-import { getAllProducts } from "@/repositories/productRepository";
+import { getAllProducts, getCategories } from "@/repositories/productRepository";
 
 export const dynamic = "force-dynamic";
 
 export default async function InventoryPage() {
-  const products = await getAllProducts();
-  return <ShopClient products={products} />;
+  const initialData = await getAllProducts({ page: 1, limit: 12 });
+  const categories = await getCategories();
+  
+  return (
+    <ShopClient 
+      initialData={initialData} 
+      categories={categories}
+    />
+  );
 }
