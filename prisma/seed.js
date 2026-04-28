@@ -26,11 +26,33 @@ async function main() {
     ]
   });
 
+  const bcrypt = require("bcryptjs");
+
+  // Create demo users with authentication
+  const hashedPasswordNormal = await bcrypt.hash("password123", 12);
+  const hashedPasswordSilver = await bcrypt.hash("password123", 12);
+  const hashedPasswordGold = await bcrypt.hash("password123", 12);
+
   const users = await prisma.user.createMany({
     data: [
-      { name: "Nisha", type: UserType.NORMAL },
-      { name: "Arjun", type: UserType.SILVER },
-      { name: "Meera", type: UserType.GOLD }
+      { 
+        name: "Nisha", 
+        email: "nisha@example.com", 
+        password: hashedPasswordNormal,
+        type: UserType.NORMAL 
+      },
+      { 
+        name: "Arjun", 
+        email: "arjun@example.com", 
+        password: hashedPasswordSilver,
+        type: UserType.SILVER 
+      },
+      { 
+        name: "Meera", 
+        email: "meera@example.com", 
+        password: hashedPasswordGold,
+        type: UserType.GOLD 
+      }
     ]
   });
 
