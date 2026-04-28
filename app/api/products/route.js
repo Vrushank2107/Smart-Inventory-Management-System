@@ -3,6 +3,8 @@ import { getAllProducts } from "@/repositories/productRepository";
 import { ProductQuerySchema, validateRequest } from "@/lib/validation/schemas";
 import { logger } from "@/lib/logging/logger";
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(req) {
   const startTime = Date.now();
   
