@@ -4,6 +4,10 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getToken } from "next-auth/jwt";
 
+function isNotFoundPrismaError(error) {
+  return error && typeof error === "object" && error.code === "P2025";
+}
+
 export async function GET(request) {
   try {
     const session = await getServerSession(authOptions);
@@ -108,22 +112,49 @@ export async function POST(request) {
       });
     }
 
-    await prisma.cartItem.upsert({
-      where: {
-        cartId_productId: {
+    try {
+      await prisma.cartItem.upsert({
+        where: {
+          cartId_productId: {
+            cartId: cart.id,
+            productId: productId
+          }
+        },
+        update: {
+          quantity: quantity
+        },
+        create: {
           cartId: cart.id,
-          productId: productId
+          productId: productId,
+          quantity: quantity
         }
-      },
-      update: {
-        quantity: quantity
-      },
-      create: {
-        cartId: cart.id,
-        productId: productId,
-        quantity: quantity
+      });
+    } catch (error) {
+      if (!isNotFoundPrismaError(error)) {
+        throw error;
       }
-    });
+      // If the cart was changed concurrently, re-create and retry once.
+      cart = await prisma.cart.findFirst({ where: { userId } });
+      if (!cart) {
+        cart = await prisma.cart.create({ data: { userId } });
+      }
+      await prisma.cartItem.upsert({
+        where: {
+          cartId_productId: {
+            cartId: cart.id,
+            productId: productId
+          }
+        },
+        update: {
+          quantity: quantity
+        },
+        create: {
+          cartId: cart.id,
+          productId: productId,
+          quantity: quantity
+        }
+      });
+    }
 
     const updatedCart = await prisma.cart.findUnique({
       where: { id: cart.id },
@@ -149,8 +180,17 @@ export async function POST(request) {
 export async function DELETE(request) {
   try {
     const session = await getServerSession(authOptions);
+    const token = session ? null : await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET });
     
-    if (!session) {
+    if (!session && !token) {
+      return NextResponse.json(
+        { error: "Unauthorized" },
+        { status: 401 }
+      );
+    }
+
+    const userId = session?.user?.id || token?.sub;
+    if (!userId) {
       return NextResponse.json(
         { error: "Unauthorized" },
         { status: 401 }
@@ -169,25 +209,29 @@ export async function DELETE(request) {
     // Get user's cart
     const cart = await prisma.cart.findFirst({
       where: {
-        userId: session.user.id
+        userId
       }
     });
 
     if (!cart) {
-      return NextResponse.json(
-        { error: "Cart not found" },
-        { status: 404 }
-      );
+      return NextResponse.json({ items: [] });
     }
 
-    await prisma.cartItem.delete({
-      where: {
-        cartId_productId: {
-          cartId: cart.id,
-          productId: productId
+    try {
+      await prisma.cartItem.delete({
+        where: {
+          cartId_productId: {
+            cartId: cart.id,
+            productId: productId
+          }
         }
+      });
+    } catch (error) {
+      if (!isNotFoundPrismaError(error)) {
+        throw error;
       }
-    });
+      // Item already absent; return the current cart state.
+    }
 
     const updatedCart = await prisma.cart.findUnique({
       where: { id: cart.id },
