@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState, useCallback, useRef } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { ProductSkeleton, LoadingSpinner } from "./SkeletonLoader";
@@ -47,7 +47,6 @@ export default function ShopClient({ initialData, categories }) {
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
-  const didMountRef = useRef(false);
   
   // Debounced search for better UX
   const debouncedSearch = useDebounce(search, 300);
@@ -138,8 +137,7 @@ export default function ShopClient({ initialData, categories }) {
   }, []);
 
   useEffect(() => {
-    if (!didMountRef.current) {
-      didMountRef.current = true;
+    if (currentPage === 1 && !debouncedSearch && !selectedCategory) {
       return;
     }
     fetchProducts(currentPage, debouncedSearch, selectedCategory);
