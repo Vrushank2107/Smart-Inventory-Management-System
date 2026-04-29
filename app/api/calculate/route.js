@@ -39,10 +39,13 @@ export async function POST(req) {
     }
 
     const { cartItems, userType } = validation.data;
+    logger.info('Validation passed', { cartItems, userType });
     
     const hydratedItems = await hydrateCartItems(cartItems);
+    logger.info('Cart items hydrated', { count: hydratedItems.length, items: hydratedItems });
     
     const rules = await getActiveDiscountRules();
+    logger.info('Discount rules fetched', { count: rules.length, rules });
     
     const engine = new DiscountEngine({ rules });
     const result = engine.evaluate({
@@ -55,7 +58,8 @@ export async function POST(req) {
       duration: `${duration}ms`,
       itemsCount: cartItems.length,
       userType,
-      discountApplied: result.discountApplied
+      discountApplied: result.discountApplied,
+      result
     });
 
     return NextResponse.json({
@@ -68,7 +72,8 @@ export async function POST(req) {
     logger.error('Calculate API error', { 
       error: error.message,
       stack: error.stack,
-      duration: `${duration}ms`
+      duration: `${duration}ms`,
+      errorDetails: error.toString()
     });
     
     // Check for database connection errors
