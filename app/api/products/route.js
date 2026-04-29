@@ -12,6 +12,8 @@ export async function GET(req) {
     const { searchParams } = new URL(req.url || '', req.nextUrl?.origin || 'http://localhost');
     const query = Object.fromEntries(searchParams.entries());
     
+    logger.info('Products API called', { url: req.url, query });
+    
     const validation = validateRequest(ProductQuerySchema, query);
     if (!validation.success) {
       logger.warn('Products validation failed', { errors: validation.error });
@@ -26,6 +28,7 @@ export async function GET(req) {
     }
 
     const { page, limit, category, search } = validation.data;
+    logger.info('Products validation passed', { page, limit, category, search });
     
     const result = await getAllProducts({
       page,
@@ -40,7 +43,8 @@ export async function GET(req) {
       page,
       limit,
       category,
-      search
+      search,
+      result
     });
 
     return NextResponse.json({
@@ -53,7 +57,8 @@ export async function GET(req) {
     logger.error('Products API error', { 
       error: error.message,
       stack: error.stack,
-      duration: `${duration}ms`
+      duration: `${duration}ms`,
+      errorDetails: error.toString()
     });
     
     // Check for database connection errors
