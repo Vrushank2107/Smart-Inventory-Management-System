@@ -158,18 +158,13 @@ export async function POST(request) {
       });
     }
 
-    const updatedCart = await prisma.cart.findUnique({
-      where: { id: cart.id },
-      include: {
-        items: {
-          include: {
-            product: true
-          }
-        }
-      }
+    // Return simple success response - client will handle optimistic updates
+    return NextResponse.json({ 
+      success: true,
+      cartId: cart.id,
+      productId,
+      quantity 
     });
-
-    return NextResponse.json(updatedCart);
   } catch (error) {
     console.error("Error adding to cart:", error);
     return NextResponse.json(
@@ -235,18 +230,12 @@ export async function DELETE(request) {
       // Item already absent; return the current cart state.
     }
 
-    const updatedCart = await prisma.cart.findUnique({
-      where: { id: cart.id },
-      include: {
-        items: {
-          include: {
-            product: true
-          }
-        }
-      }
+    // Return simple success response - client will handle optimistic updates
+    return NextResponse.json({ 
+      success: true,
+      cartId: cart.id,
+      productId 
     });
-
-    return NextResponse.json(updatedCart || { items: [] });
   } catch (error) {
     console.error("Error removing from cart:", error);
     return NextResponse.json(

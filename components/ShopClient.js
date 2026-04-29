@@ -23,6 +23,26 @@ function useDebounce(value, delay) {
   return debouncedValue;
 }
 
+// Debounce hook for discount calculation
+function useDebounceCallback(callback, delay) {
+  const [debouncedCall, setDebouncedCall] = useState(null);
+
+  useEffect(() => {
+    if (debouncedCall) {
+      const handler = setTimeout(() => {
+        callback();
+        setDebouncedCall(null);
+      }, delay);
+
+      return () => {
+        clearTimeout(handler);
+      };
+    }
+  }, [debouncedCall, callback, delay]);
+
+  return () => setDebouncedCall(true);
+}
+
 function money(value) {
   return Number(value || 0).toFixed(2);
 }
@@ -48,6 +68,7 @@ export default function ShopClient({ initialData, categories }) {
   });
   const [isCalculating, setIsCalculating] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [updatingCart, setUpdatingCart] = useState(null);
   
   // Pagination and filtering state
   const [products, setProducts] = useState(initialData.products);
@@ -125,6 +146,45 @@ export default function ShopClient({ initialData, categories }) {
     calculate();
   }, [cartItems, userType]);
 
+  // Debounced calculation for better performance
+  const debouncedCalculate = useDebounceCallback(() => {
+    if (!cartItems.length) {
+      setSummary({
+        total: 0,
+        discountApplied: 0,
+        finalAmount: 0,
+        explanation: ["Add products to start discount evaluation."]
+      });
+      return;
+    }
+    setIsCalculating(true);
+
+    fetch("/api/calculate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cartItems, userType })
+    })
+      .then((response) => {
+        if (!response.ok) throw new Error(`Failed to calculate discounts (${response.status})`);
+        return parseJsonResponse(response);
+      })
+      .then((data) => setSummary(data))
+      .catch((error) => {
+        console.error("Calculation error:", error);
+        setSummary({
+          total: 0,
+          discountApplied: 0,
+          finalAmount: 0,
+          explanation: ["Error calculating discounts. Please try again."]
+        });
+      })
+      .finally(() => setIsCalculating(false));
+  }, 500);
+
+  useEffect(() => {
+    debouncedCalculate();
+  }, [cartItems, userType, debouncedCalculate]);
+
   const fetchProducts = useCallback(async (page = 1, searchQuery = "", category = "") => {
     setLoading(true);
     try {
@@ -178,6 +238,7 @@ export default function ShopClient({ initialData, categories }) {
     const fallbackProduct = products.find((item) => item.id === productId);
     const previousCartItems = cartItems;
 
+    setUpdatingCart(productId);
     setCartItems((prev) => {
       const existing = prev.find((item) => item.productId === productId);
       if (existing) {
@@ -202,15 +263,15 @@ export default function ShopClient({ initialData, categories }) {
         body: JSON.stringify({ productId, quantity: newQuantity })
       });
 
-      if (response.ok) {
-        const data = await parseJsonResponse(response);
-        setCartItems(data.items || []);
-      } else {
+      if (!response.ok) {
         setCartItems(previousCartItems);
       }
+      // Optimistic update already applied, no need to update from response
     } catch (error) {
       console.error("Error adding to cart:", error);
       setCartItems(previousCartItems);
+    } finally {
+      setUpdatingCart(null);
     }
   };
 
@@ -226,10 +287,7 @@ export default function ShopClient({ initialData, categories }) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ productId })
         });
-        if (response.ok) {
-          const data = await parseJsonResponse(response);
-          setCartItems(data.items || []);
-        } else {
+        if (!response.ok) {
           setCartItems(previousCartItems);
         }
       } catch (error) {
@@ -250,10 +308,7 @@ export default function ShopClient({ initialData, categories }) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ productId, quantity: newQuantity })
         });
-        if (response.ok) {
-          const data = await parseJsonResponse(response);
-          setCartItems(data.items || []);
-        } else {
+        if (!response.ok) {
           setCartItems(previousCartItems);
         }
       } catch (error) {
@@ -426,15 +481,17 @@ export default function ShopClient({ initialData, categories }) {
                     </button>
                     <button
                       onClick={() => addToCart(product.id)}
-                      disabled={quantityById.get(product.id) >= 8}
+                      disabled={quantityById.get(product.id) >= 8 || updatingCart === product.id}
                       className={`btn-muted flex-1 group-hover:border-cyan-300/40 disabled:opacity-50 disabled:cursor-not-allowed ${
                         quantityById.get(product.id) >= 8 ? 'bg-surface-100 dark:bg-surface-700' : ''
                       }`}
                       aria-label={`Add ${product.name} to cart`}
                     >
-                      {quantityById.get(product.id) >= 8 
-                        ? `Max Quantity (${quantityById.get(product.id)})` 
-                        : `Add to Cart (${quantityById.get(product.id) || 0})`
+                      {updatingCart === product.id 
+                        ? 'Adding...' 
+                        : quantityById.get(product.id) >= 8 
+                          ? `Max Quantity (${quantityById.get(product.id)})` 
+                          : `Add to Cart (${quantityById.get(product.id) || 0})`
                       }
                     </button>
                   </div>

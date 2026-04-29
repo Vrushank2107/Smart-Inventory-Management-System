@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 
 function money(value) {
   return Number(value || 0).toFixed(2);
@@ -88,55 +88,85 @@ export default function CartClient({ products }) {
   };
 
   const updateQuantity = async (productId, quantity) => {
+    const previousCartItems = cartItems;
+    
     if (quantity <= 0) {
-      // Remove item from cart
+      // Remove item from cart - optimistic update
+      setCartItems(prev => prev.filter(item => item.productId !== productId));
       try {
         const response = await fetch("/api/cart", {
           method: "DELETE",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ productId })
         });
-        if (response.ok) {
-          setCartItems(prev => prev.filter(item => item.productId !== productId));
+        if (!response.ok) {
+          setCartItems(previousCartItems);
         }
       } catch (error) {
         console.error("Error removing item:", error);
+        setCartItems(previousCartItems);
       }
     } else {
-      // Update item quantity
+      // Update item quantity - optimistic update
+      setCartItems(prev => 
+        prev.map(item => 
+          item.productId === productId ? { ...item, quantity } : item
+        )
+      );
       try {
         const response = await fetch("/api/cart", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ productId, quantity })
         });
-        if (response.ok) {
-          setCartItems(prev => 
-            prev.map(item => 
-              item.productId === productId ? { ...item, quantity } : item
-            )
-          );
+        if (!response.ok) {
+          setCartItems(previousCartItems);
         }
       } catch (error) {
         console.error("Error updating quantity:", error);
+        setCartItems(previousCartItems);
       }
     }
   };
 
+  // Debounce hook for discount calculation
+  const debouncedCalculate = useCallback(
+    useMemo(() => {
+      let timeoutId;
+      return () => {
+        clearTimeout(timeoutId);
+        timeoutId = setTimeout(async () => {
+          if (!cartItems.length) {
+            setSummary({
+              total: 0,
+              discountApplied: 0,
+              finalAmount: 0,
+              explanation: []
+            });
+            return;
+          }
+          setIsCalculating(true);
+          try {
+            const response = await fetch("/api/calculate", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ cartItems, userType })
+            });
+            const data = await response.json();
+            setSummary(data);
+          } catch (error) {
+            console.error("Calculation error:", error);
+          } finally {
+            setIsCalculating(false);
+          }
+        }, 500);
+      };
+    }, [cartItems, userType])
+  , [cartItems, userType]);
+
   useEffect(() => {
-    const calculate = async () => {
-      setIsCalculating(true);
-      const response = await fetch("/api/calculate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cartItems, userType })
-      });
-      const data = await response.json();
-      setSummary(data);
-      setIsCalculating(false);
-    };
-    calculate();
-  }, [cartItems, userType]);
+    debouncedCalculate();
+  }, [debouncedCalculate]);
 
   const rows = useMemo(() => {
     const byId = new Map(products.map((product) => [product.id, product]));

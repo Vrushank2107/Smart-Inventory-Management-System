@@ -14,7 +14,7 @@ const MOCK_DISCOUNT_RULES = [
     priority: 1,
     isActive: true,
     combinable: true,
-    config: { discountPercent: 10, minPurchase: 0 }
+    value: 10
   },
   {
     id: "2",
@@ -23,7 +23,7 @@ const MOCK_DISCOUNT_RULES = [
     priority: 2,
     isActive: true,
     combinable: true,
-    config: { discountPercent: 5, userType: "SILVER" }
+    value: 5
   },
   {
     id: "3",
@@ -32,7 +32,7 @@ const MOCK_DISCOUNT_RULES = [
     priority: 3,
     isActive: true,
     combinable: true,
-    config: { discountPercent: 10, userType: "GOLD" }
+    value: 10
   },
   {
     id: "4",
@@ -41,7 +41,7 @@ const MOCK_DISCOUNT_RULES = [
     priority: 1,
     isActive: true,
     combinable: true,
-    config: { discountPercent: 15, minPurchase: 5000 }
+    value: 5000
   }
 ];
 
