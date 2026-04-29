@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { ProductSkeleton, LoadingSpinner } from "./SkeletonLoader";
@@ -25,22 +25,22 @@ function useDebounce(value, delay) {
 
 // Debounce hook for discount calculation
 function useDebounceCallback(callback, delay) {
-  const [debouncedCall, setDebouncedCall] = useState(null);
+  const callbackRef = useRef(callback);
+  const timeoutRef = useRef(null);
 
+  // Update callback ref when callback changes
   useEffect(() => {
-    if (debouncedCall) {
-      const handler = setTimeout(() => {
-        callback();
-        setDebouncedCall(null);
-      }, delay);
+    callbackRef.current = callback;
+  }, [callback]);
 
-      return () => {
-        clearTimeout(handler);
-      };
+  return useCallback(() => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
     }
-  }, [debouncedCall, callback, delay]);
-
-  return () => setDebouncedCall(true);
+    timeoutRef.current = setTimeout(() => {
+      callbackRef.current();
+    }, delay);
+  }, [delay]);
 }
 
 function money(value) {
@@ -79,6 +79,7 @@ export default function ShopClient({ initialData, categories }) {
   
   // Debounced search for better UX
   const debouncedSearch = useDebounce(search, 300);
+  const hasFetchedCart = useRef(false);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -86,11 +87,12 @@ export default function ShopClient({ initialData, categories }) {
       return;
     }
 
-    if (status === "authenticated") {
+    if (status === "authenticated" && !hasFetchedCart.current) {
       fetchCart();
-      setUserType(session.user.type || "NORMAL");
+      setUserType(session?.user?.type || "NORMAL");
+      hasFetchedCart.current = true;
     }
-  }, [status, session, router]);
+  }, [status, router]);
 
   const fetchCart = async () => {
     try {
@@ -107,48 +109,24 @@ export default function ShopClient({ initialData, categories }) {
     }
   };
 
+  // Refs to avoid dependency issues
+  const cartItemsRef = useRef(cartItems);
+  const userTypeRef = useRef(userType);
+
   useEffect(() => {
-    const calculate = async () => {
-      if (!cartItems.length) {
-        setSummary({
-          total: 0,
-          discountApplied: 0,
-          finalAmount: 0,
-          explanation: ["Add products to start discount evaluation."]
-        });
-        return;
-      }
-      setIsCalculating(true);
+    cartItemsRef.current = cartItems;
+  }, [cartItems]);
 
-      try {
-        const response = await fetch("/api/calculate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ cartItems, userType })
-        });
-        if (!response.ok) {
-          throw new Error(`Failed to calculate discounts (${response.status})`);
-        }
-        const data = await parseJsonResponse(response);
-        setSummary(data);
-      } catch (error) {
-        console.error("Calculation error:", error);
-        setSummary({
-          total: 0,
-          discountApplied: 0,
-          finalAmount: 0,
-          explanation: ["Error calculating discounts. Please try again."]
-        });
-      }
-      setIsCalculating(false);
-    };
-
-    calculate();
-  }, [cartItems, userType]);
+  useEffect(() => {
+    userTypeRef.current = userType;
+  }, [userType]);
 
   // Debounced calculation for better performance
-  const debouncedCalculate = useDebounceCallback(() => {
-    if (!cartItems.length) {
+  const calculateDiscounts = useCallback(() => {
+    const currentCartItems = cartItemsRef.current;
+    const currentUserType = userTypeRef.current;
+
+    if (!currentCartItems.length) {
       setSummary({
         total: 0,
         discountApplied: 0,
@@ -162,7 +140,7 @@ export default function ShopClient({ initialData, categories }) {
     fetch("/api/calculate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cartItems, userType })
+      body: JSON.stringify({ cartItems: currentCartItems, userType: currentUserType })
     })
       .then((response) => {
         if (!response.ok) throw new Error(`Failed to calculate discounts (${response.status})`);
@@ -179,11 +157,13 @@ export default function ShopClient({ initialData, categories }) {
         });
       })
       .finally(() => setIsCalculating(false));
-  }, 500);
+  }, []); // No dependencies - uses refs
+
+  const debouncedCalculate = useDebounceCallback(calculateDiscounts, 500);
 
   useEffect(() => {
     debouncedCalculate();
-  }, [cartItems, userType, debouncedCalculate]);
+  }, [cartItems, userType]);
 
   const fetchProducts = useCallback(async (page = 1, searchQuery = "", category = "") => {
     setLoading(true);

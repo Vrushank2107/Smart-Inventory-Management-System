@@ -1,9 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { redisCache } from "@/lib/cache/redisCache";
 import { logger } from "@/lib/logging/logger";
-
-const CACHE_KEY = 'active_discount_rules';
-const CACHE_TTL = 300; // 5 minutes
 
 // Mock discount rules for production when database is not configured
 const MOCK_DISCOUNT_RULES = [
@@ -53,41 +49,20 @@ export async function getActiveDiscountRules() {
       return MOCK_DISCOUNT_RULES.filter(rule => rule.isActive);
     }
 
-    // Try to get from cache first
-    const cachedRules = await redisCache.get(CACHE_KEY);
-    if (cachedRules) {
-      logger.debug('Discount rules retrieved from cache');
-      return cachedRules;
-    }
-
-    // If not in cache, fetch from database
+    // Fetch from database
     logger.info('Fetching discount rules from database');
     const rules = await prisma.discountRule.findMany({
       where: { isActive: true },
       orderBy: [{ priority: "desc" }, { name: "asc" }]
     });
 
-    // Cache the results
-    await redisCache.set(CACHE_KEY, rules, CACHE_TTL);
-    logger.info('Discount rules cached successfully', { count: rules.length });
-
+    logger.info('Discount rules fetched successfully', { count: rules.length });
     return rules;
   } catch (error) {
     logger.error('Error fetching discount rules', { error: error.message });
     // Return mock rules as fallback
     console.warn('Error fetching discount rules, using mock data as fallback');
     return MOCK_DISCOUNT_RULES.filter(rule => rule.isActive);
-  }
-}
-
-export async function invalidateDiscountRulesCache() {
-  try {
-    await redisCache.del(CACHE_KEY);
-    logger.info('Discount rules cache invalidated');
-    return true;
-  } catch (error) {
-    logger.error('Error invalidating discount rules cache', { error: error.message });
-    return false;
   }
 }
 
@@ -109,8 +84,6 @@ export async function createDiscountRule(data) {
       data
     });
     
-    // Invalidate cache when new rule is created
-    await invalidateDiscountRulesCache();
     logger.info('New discount rule created', { id: rule.id, name: rule.name });
     
     return rule;
@@ -127,8 +100,6 @@ export async function updateDiscountRule(id, data) {
       data
     });
     
-    // Invalidate cache when rule is updated
-    await invalidateDiscountRulesCache();
     logger.info('Discount rule updated', { id, name: rule.name });
     
     return rule;
@@ -144,8 +115,6 @@ export async function deleteDiscountRule(id) {
       where: { id }
     });
     
-    // Invalidate cache when rule is deleted
-    await invalidateDiscountRulesCache();
     logger.info('Discount rule deleted', { id, name: rule.name });
     
     return rule;
