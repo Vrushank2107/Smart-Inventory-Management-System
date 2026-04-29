@@ -9,7 +9,10 @@ export async function GET(req) {
   const startTime = Date.now();
   
   try {
-    const { searchParams } = new URL(req.url || '', req.nextUrl?.origin || 'http://localhost');
+    const { searchParams } = new URL(
+      req.url || '',
+      req.nextUrl?.origin || 'https://smart-inventory-management-system-uezo-vrushank.vercel.app'
+    );
     const query = Object.fromEntries(searchParams.entries());
     
     logger.info('Products API called', { url: req.url, query });
