@@ -8,9 +8,10 @@ export async function middleware(request) {
   const { pathname } = request.nextUrl;
   const isAuthRoute = pathname.startsWith('/auth/') || pathname.startsWith('/api/auth/');
   const isPublicRoute = pathname === '/' || pathname.startsWith('/_next') || pathname.includes('.');
+  const isPublicAPI = pathname.startsWith('/api/products') || pathname.startsWith('/api/calculate');
   
-  // Protect all routes except auth pages and home page
-  if (!isAuthRoute && !isPublicRoute) {
+  // Protect all routes except auth pages, home page, and public API routes
+  if (!isAuthRoute && !isPublicRoute && !isPublicAPI) {
     const token = await getToken({ 
       req: request, 
       secret: process.env.NEXTAUTH_SECRET,
