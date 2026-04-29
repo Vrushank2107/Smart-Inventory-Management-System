@@ -11,7 +11,7 @@ export async function GET(req) {
   try {
     const { searchParams } = new URL(
       req.url || '',
-      req.nextUrl?.origin || 'https://smart-inventory-management-system-uezo-vrushank.vercel.app'
+      req.nextUrl?.origin || 'https://smart-inventory-management-system-gamma.vercel.app'
     );
     const query = Object.fromEntries(searchParams.entries());
     
