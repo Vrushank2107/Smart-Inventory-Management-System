@@ -9,7 +9,7 @@ function money(value) {
   return Number(value || 0).toFixed(2);
 }
 
-export default function CartClient({ products }) {
+export default function CartClient() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -43,12 +43,12 @@ export default function CartClient({ products }) {
       if (response.ok) {
         const cart = await response.json();
         setCartItems(cart.items || []);
-        
+
         // Check if discount data is passed from inventory page
         const urlTotal = searchParams.get('total');
         const urlDiscount = searchParams.get('discount');
         const urlFinalAmount = searchParams.get('finalAmount');
-        
+
         if (urlTotal && urlDiscount && urlFinalAmount) {
           // Use discount data from URL parameters
           const urlUserType = searchParams.get('userType') || session?.user?.type || "NORMAL";
@@ -169,19 +169,17 @@ export default function CartClient({ products }) {
   }, [debouncedCalculate]);
 
   const rows = useMemo(() => {
-    const byId = new Map(products.map((product) => [product.id, product]));
     return cartItems
       .map((item) => {
-        const product = byId.get(item.productId);
-        if (!product) return null;
+        if (!item.product) return null;
         return {
           ...item,
-          name: product.name,
-          price: Number(product.price)
+          name: item.product.name,
+          price: Number(item.product.price)
         };
       })
       .filter(Boolean);
-  }, [cartItems, products]);
+  }, [cartItems]);
 
   
   return (
