@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import { RegisterSchema, validateRequest } from "@/lib/validation/schemas";
-import { logger } from "@/lib/logging/logger";
 
 export async function POST(request) {
   const startTime = Date.now();
@@ -18,15 +17,9 @@ export async function POST(request) {
     }
 
     const body = await request.json();
-    logger.info('Registration request received', { 
-      email: body.email,
-      userAgent: request.headers.get('user-agent'),
-      ip: request.headers.get('x-forwarded-for') || 'unknown'
-    });
 
     const validation = validateRequest(RegisterSchema, body);
     if (!validation.success) {
-      logger.warn('Registration validation failed', { errors: validation.error });
       return NextResponse.json(
         { 
           error: 'Invalid registration data',
@@ -44,7 +37,6 @@ export async function POST(request) {
     });
 
     if (existingUser) {
-      logger.warn('Registration attempt with existing email', { email });
       return NextResponse.json(
         { 
           error: 'User already exists with this email',
@@ -66,12 +58,6 @@ export async function POST(request) {
     });
 
     const duration = Date.now() - startTime;
-    logger.info('User registered successfully', { 
-      duration: `${duration}ms`,
-      userId: user.id,
-      email: user.email,
-      type: user.type
-    });
 
     return NextResponse.json({
       message: "User created successfully",
@@ -86,12 +72,6 @@ export async function POST(request) {
 
   } catch (error) {
     const duration = Date.now() - startTime;
-    logger.error('Registration error', { 
-      error: error.message,
-      stack: error.stack,
-      code: error.code,
-      duration: `${duration}ms`
-    });
     
     console.error('Registration error details:', {
       message: error.message,

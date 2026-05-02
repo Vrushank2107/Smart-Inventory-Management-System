@@ -3,7 +3,6 @@ import { hydrateCartItems } from "@/repositories/cartRepository";
 import { getActiveDiscountRules } from "@/repositories/discountRuleRepository";
 import { DiscountEngine } from "@/services/DiscountEngine";
 import { CalculateRequestSchema, validateRequest } from "@/lib/validation/schemas";
-import { logger } from "@/lib/logging/logger";
 
 export const dynamic = 'force-dynamic';
 
@@ -12,10 +11,8 @@ export async function POST(req) {
   
   try {
     const body = await req.json();
-    logger.info('Calculate request received', { body });
 
     if (!body || typeof body !== 'object') {
-      logger.warn('Invalid request body');
       return NextResponse.json(
         { 
           error: 'Invalid request body',
@@ -27,7 +24,6 @@ export async function POST(req) {
 
     const validation = validateRequest(CalculateRequestSchema, body);
     if (!validation.success) {
-      logger.warn('Validation failed', { errors: validation.error });
       return NextResponse.json(
         { 
           error: 'Invalid request data',
@@ -39,13 +35,10 @@ export async function POST(req) {
     }
 
     const { cartItems, userType } = validation.data;
-    logger.info('Validation passed', { cartItems, userType });
     
     const hydratedItems = await hydrateCartItems(cartItems);
-    logger.info('Cart items hydrated', { count: hydratedItems.length, items: hydratedItems });
     
     const rules = await getActiveDiscountRules();
-    logger.info('Discount rules fetched', { count: rules.length, rules });
     
     const engine = new DiscountEngine({ rules });
     const result = engine.evaluate({
@@ -54,13 +47,6 @@ export async function POST(req) {
     });
     
     const duration = Date.now() - startTime;
-    logger.info('Discount calculation completed', { 
-      duration: `${duration}ms`,
-      itemsCount: cartItems.length,
-      userType,
-      discountApplied: result.discountApplied,
-      result
-    });
 
     return NextResponse.json({
       ...result,
@@ -69,12 +55,6 @@ export async function POST(req) {
 
   } catch (error) {
     const duration = Date.now() - startTime;
-    logger.error('Calculate API error', { 
-      error: error.message,
-      stack: error.stack,
-      duration: `${duration}ms`,
-      errorDetails: error.toString()
-    });
     
     // Check for database connection errors
     if (error.message && (error.message.includes('connect') || error.message.includes('database'))) {

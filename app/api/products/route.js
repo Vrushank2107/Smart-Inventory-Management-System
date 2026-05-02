@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAllProducts } from "@/repositories/productRepository";
 import { ProductQuerySchema, validateRequest } from "@/lib/validation/schemas";
-import { logger } from "@/lib/logging/logger";
 
 export const dynamic = 'force-dynamic';
 
@@ -15,11 +14,8 @@ export async function GET(req) {
     );
     const query = Object.fromEntries(searchParams.entries());
     
-    logger.info('Products API called', { url: req.url, query });
-    
     const validation = validateRequest(ProductQuerySchema, query);
     if (!validation.success) {
-      logger.warn('Products validation failed', { errors: validation.error });
       return NextResponse.json(
         { 
           error: 'Invalid query parameters',
@@ -31,7 +27,6 @@ export async function GET(req) {
     }
 
     const { page, limit, category, search } = validation.data;
-    logger.info('Products validation passed', { page, limit, category, search });
     
     const result = await getAllProducts({
       page,
@@ -41,14 +36,6 @@ export async function GET(req) {
     });
 
     const duration = Date.now() - startTime;
-    logger.info('Products retrieved successfully', {
-      duration: `${duration}ms`,
-      page,
-      limit,
-      category,
-      search,
-      result
-    });
 
     return NextResponse.json({
       ...result,
@@ -57,12 +44,6 @@ export async function GET(req) {
 
   } catch (error) {
     const duration = Date.now() - startTime;
-    logger.error('Products API error', { 
-      error: error.message,
-      stack: error.stack,
-      duration: `${duration}ms`,
-      errorDetails: error.toString()
-    });
     
     // Check for database connection errors
     if (error.message && error.message.includes('connect')) {

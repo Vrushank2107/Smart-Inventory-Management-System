@@ -1,5 +1,4 @@
 import { prisma } from "@/lib/prisma";
-import { logger } from "@/lib/logging/logger";
 
 // Mock discount rules for production when database is not configured
 const MOCK_DISCOUNT_RULES = [
@@ -50,16 +49,13 @@ export async function getActiveDiscountRules() {
     }
 
     // Fetch from database
-    logger.info('Fetching discount rules from database');
     const rules = await prisma.discountRule.findMany({
       where: { isActive: true },
       orderBy: [{ priority: "desc" }, { name: "asc" }]
     });
 
-    logger.info('Discount rules fetched successfully', { count: rules.length });
     return rules;
   } catch (error) {
-    logger.error('Error fetching discount rules', { error: error.message });
     // Return mock rules as fallback
     console.warn('Error fetching discount rules, using mock data as fallback');
     return MOCK_DISCOUNT_RULES.filter(rule => rule.isActive);
@@ -73,7 +69,6 @@ export async function getAllDiscountRules() {
     });
     return rules;
   } catch (error) {
-    logger.error('Error fetching all discount rules', { error: error.message });
     throw error;
   }
 }
@@ -84,11 +79,8 @@ export async function createDiscountRule(data) {
       data
     });
     
-    logger.info('New discount rule created', { id: rule.id, name: rule.name });
-    
     return rule;
   } catch (error) {
-    logger.error('Error creating discount rule', { error: error.message });
     throw error;
   }
 }
@@ -100,11 +92,8 @@ export async function updateDiscountRule(id, data) {
       data
     });
     
-    logger.info('Discount rule updated', { id, name: rule.name });
-    
     return rule;
   } catch (error) {
-    logger.error('Error updating discount rule', { id, error: error.message });
     throw error;
   }
 }
@@ -115,11 +104,8 @@ export async function deleteDiscountRule(id) {
       where: { id }
     });
     
-    logger.info('Discount rule deleted', { id, name: rule.name });
-    
     return rule;
   } catch (error) {
-    logger.error('Error deleting discount rule', { id, error: error.message });
     throw error;
   }
 }
