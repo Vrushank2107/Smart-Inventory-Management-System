@@ -7,7 +7,7 @@
   "env": {
     "NEXTAUTH_SECRET": "nextauth-secret",
     "NEXTAUTH_URL": "nextauth-url",
-    "DATABASE_URL": "database-url"
+    "DATABASE_URL": "postgres://neondb_owner:npg_fi5zDcQVqO1v@ep-holy-frost-amjppkd2-pooler.c-5.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
   },
   "functions": {
     "app/api/**/*.js": {
