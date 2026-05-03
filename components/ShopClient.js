@@ -207,6 +207,12 @@ export default function ShopClient({ initialData, categories }) {
   }, [cartItems]);
 
   const addToCart = async (productId) => {
+    // Check if user is authenticated
+    if (!session) {
+      router.push('/auth/signin');
+      return;
+    }
+
     const currentQuantity = quantityById.get(productId) || 0;
     const maxQuantity = 8; // Set reasonable limit
     
@@ -245,6 +251,10 @@ export default function ShopClient({ initialData, categories }) {
 
       if (!response.ok) {
         setCartItems(previousCartItems);
+        if (response.status === 401) {
+          // Unauthorized, redirect to login
+          router.push('/auth/signin');
+        }
       }
       // Optimistic update already applied, no need to update from response
     } catch (error) {
@@ -256,6 +266,12 @@ export default function ShopClient({ initialData, categories }) {
   };
 
   const decreaseQuantity = async (productId) => {
+    // Check if user is authenticated
+    if (!session) {
+      router.push('/auth/signin');
+      return;
+    }
+
     const currentQuantity = quantityById.get(productId) || 0;
     const previousCartItems = cartItems;
     if (currentQuantity <= 1) {
@@ -269,6 +285,10 @@ export default function ShopClient({ initialData, categories }) {
         });
         if (!response.ok) {
           setCartItems(previousCartItems);
+          if (response.status === 401) {
+            // Unauthorized, redirect to login
+            router.push('/auth/signin');
+          }
         }
       } catch (error) {
         console.error("Error removing from cart:", error);
@@ -290,6 +310,10 @@ export default function ShopClient({ initialData, categories }) {
         });
         if (!response.ok) {
           setCartItems(previousCartItems);
+          if (response.status === 401) {
+            // Unauthorized, redirect to login
+            router.push('/auth/signin');
+          }
         }
       } catch (error) {
         console.error("Error updating quantity:", error);
@@ -437,6 +461,21 @@ export default function ShopClient({ initialData, categories }) {
               {loading && <LoadingSpinner size="sm" />}
             </div>
             
+            {/* Authentication Notice */}
+            {!session && (
+              <div className="glass-card bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-4 rounded-lg mb-6">
+                <div className="flex items-center gap-3">
+                  <svg className="w-5 h-5 text-amber-600 dark:text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                  </svg>
+                  <div>
+                    <p className="text-amber-800 dark:text-amber-200 font-medium">Login Required for Cart</p>
+                    <p className="text-amber-700 dark:text-amber-300 text-sm">Please <Link href="/auth/signin" className="underline hover:text-amber-900 dark:hover:text-amber-100">sign in</Link> to add items to your cart and place orders.</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
               {products.map((product) => (
                 <article

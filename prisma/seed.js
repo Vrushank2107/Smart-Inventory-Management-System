@@ -58,12 +58,13 @@ async function main() {
 
   const rules = await prisma.discountRule.createMany({
     data: [
-      { name: "Spring Festival 8%", type: DiscountRuleType.FESTIVAL, value: 8, isActive: true, priority: 90, combinable: false },
-      { name: "Weekend Festival 5%", type: DiscountRuleType.FESTIVAL, value: 5, isActive: true, priority: 70, combinable: true },
+      { name: "New Year Discount 10%", type: DiscountRuleType.FESTIVAL, value: 10, isActive: true, priority: 90, combinable: false },
+      { name: "Diwali Discount 15%", type: DiscountRuleType.FESTIVAL, value: 15, isActive: true, priority: 85, combinable: false },
+      { name: "Weekend Discount 5%", type: DiscountRuleType.FESTIVAL, value: 5, isActive: true, priority: 70, combinable: true },
       { name: "Membership Bonus 10%", type: DiscountRuleType.MEMBERSHIP, value: 10, isActive: true, priority: 80, combinable: true },
       { name: "Premium Membership 15%", type: DiscountRuleType.MEMBERSHIP, value: 15, isActive: true, priority: 75, combinable: false },
       { name: "Min Purchase 5000", type: DiscountRuleType.MIN_PURCHASE, value: 5000, isActive: true, priority: 65, combinable: true },
-      { name: "Min Purchase 10000", type: DiscountRuleType.MIN_PURCHASE, value: 10000, isActive: true, priority: 85, combinable: false },
+      { name: "Min Purchase 10000", type: DiscountRuleType.MIN_PURCHASE, value: 10000, isActive: true, priority: 88, combinable: false },
       { name: "Dormant Rule", type: DiscountRuleType.FESTIVAL, value: 20, isActive: false, priority: 99, combinable: true }
     ]
   });

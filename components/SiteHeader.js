@@ -11,7 +11,8 @@ const navItems = [
   { href: "/inventory", label: "Inventory" },
   { href: "/cart", label: "Cart" },
   { href: "/checkout", label: "Checkout" },
-  { href: "/orders", label: "Orders" }
+  { href: "/orders", label: "Orders" },
+  { href: "/offers", label: "Offers" }
 ];
 
 export default function SiteHeader() {

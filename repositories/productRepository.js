@@ -14,6 +14,7 @@ const MOCK_PRODUCTS = [
   { id: "10", name: "Cable Organizer", price: 399, category: "Accessories", createdAt: new Date().toISOString() },
   { id: "11", name: "Portable SSD 1TB", price: 6999, category: "Storage", createdAt: new Date().toISOString() },
   { id: "12", name: "SD Card 128GB", price: 999, category: "Storage", createdAt: new Date().toISOString() },
+  { id: "13", name: "Premium Laptop", price: 12000, category: "Electronics", createdAt: new Date().toISOString() },
 ];
 
 function serializeProduct(product) {
@@ -149,17 +150,23 @@ export async function getProductsByIds(ids) {
   // Check if database is configured
   if (!process.env.DATABASE_URL) {
     console.warn('DATABASE_URL not configured, using mock data for getProductsByIds');
-    return MOCK_PRODUCTS.filter(p => ids.includes(p.id));
+    const filtered = MOCK_PRODUCTS.filter(p => ids.includes(p.id));
+    console.log('Mock products lookup - IDs requested:', ids, 'Found:', filtered.length);
+    return filtered.map(serializeProduct);
   }
 
   try {
+    console.log('Database products lookup - IDs requested:', ids);
     const products = await prisma.product.findMany({
       where: { id: { in: ids } }
     });
+    console.log('Database products found:', products.length);
     return products.map(serializeProduct);
   } catch (error) {
     console.error('Database query failed for getProductsByIds, falling back to mock data', error);
-    return MOCK_PRODUCTS.filter(p => ids.includes(p.id));
+    const filtered = MOCK_PRODUCTS.filter(p => ids.includes(p.id));
+    console.log('Mock products fallback - IDs requested:', ids, 'Found:', filtered.length);
+    return filtered.map(serializeProduct);
   }
 }
 

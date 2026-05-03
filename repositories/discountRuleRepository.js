@@ -4,39 +4,66 @@ import { prisma } from "@/lib/prisma";
 const MOCK_DISCOUNT_RULES = [
   {
     id: "1",
-    name: "Festival Discount",
+    name: "New Year Discount 10%",
     type: "FESTIVAL",
-    priority: 1,
+    priority: 90,
     isActive: true,
-    combinable: true,
+    combinable: false,
     value: 10
   },
   {
     id: "2",
-    name: "Silver Membership",
-    type: "MEMBERSHIP",
-    priority: 2,
+    name: "Diwali Discount 15%",
+    type: "FESTIVAL",
+    priority: 85,
+    isActive: true,
+    combinable: false,
+    value: 15
+  },
+  {
+    id: "3",
+    name: "Weekend Discount 5%",
+    type: "FESTIVAL",
+    priority: 70,
     isActive: true,
     combinable: true,
     value: 5
   },
   {
-    id: "3",
+    id: "4",
+    name: "Silver Membership",
+    type: "MEMBERSHIP",
+    priority: 80,
+    isActive: true,
+    combinable: true,
+    value: 5
+  },
+  {
+    id: "5",
     name: "Gold Membership",
     type: "MEMBERSHIP",
-    priority: 3,
+    priority: 75,
     isActive: true,
     combinable: true,
     value: 10
   },
   {
-    id: "4",
+    id: "6",
     name: "Bulk Purchase",
     type: "MIN_PURCHASE",
-    priority: 1,
+    priority: 65,
     isActive: true,
     combinable: true,
     value: 5000
+  },
+  {
+    id: "7",
+    name: "Min Purchase 10000",
+    type: "MIN_PURCHASE",
+    priority: 88,
+    isActive: true,
+    combinable: false,
+    value: 10000
   }
 ];
 

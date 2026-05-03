@@ -27,7 +27,9 @@ export class DiscountEngine {
       }
 
       const nonCombinables = set.filter((rule) => !rule.combinable);
-      if (set.length > 1 && nonCombinables.length > 0) continue;
+      // Allow combinations with non-combinable rules only if it's a single rule
+      // OR if all rules in the combination are non-combinable (individual evaluation)
+      if (set.length > 1 && nonCombinables.length > 0 && nonCombinables.length < set.length) continue;
       combinations.push(set);
     }
 
@@ -55,7 +57,7 @@ export class DiscountEngine {
     const combos = this.generateValidCombinations(activeRules);
     let best = {
       discount: 0,
-      explanation: ["No combination yielded positive discount."]
+      explanation: ["No discounts applied."]
     };
 
     for (const combo of combos) {
@@ -65,14 +67,17 @@ export class DiscountEngine {
       for (const rule of combo) {
         const result = rule.discount.evaluate({ cart, user });
         discount += result.amount;
-        explanation.push(result.label);
+        // Only add to explanation if discount was actually applied (amount > 0)
+        if (result.amount > 0) {
+          explanation.push(result.label);
+        }
       }
 
       const boundedDiscount = Math.min(discount, total);
       if (boundedDiscount > best.discount) {
         best = {
           discount: boundedDiscount,
-          explanation
+          explanation: explanation.length > 0 ? explanation : ["No discounts applied."]
         };
       }
     }
@@ -86,7 +91,7 @@ export class DiscountEngine {
       explanation: [
         `Cart subtotal: ${total.toFixed(2)}`,
         ...best.explanation,
-        `Best discount selected: ${best.discount.toFixed(2)}`
+        best.discount > 0 ? `Total discount: ${best.discount.toFixed(2)}` : "No discounts were applied"
       ]
     };
   }
