@@ -2,7 +2,7 @@
 
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { useEffect, Suspense } from "react";
+import { Suspense } from "react";
 
 function AuthErrorContent() {
   const searchParams = useSearchParams();
@@ -37,7 +37,6 @@ function AuthErrorContent() {
     }
   };
 
-  export default function AuthError() {
   return (
     <Suspense fallback={
       <div className="min-h-screen flex items-center justify-center">
@@ -55,4 +54,7 @@ function AuthErrorContent() {
     </Suspense>
   );
 }
+
+export default function AuthError() {
+  return <AuthErrorContent />;
 }
